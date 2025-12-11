@@ -26,4 +26,5 @@ I am planning to add these basic functions to this software:
 11. pen
 11 is called PEN
 */
-size(800, 600);
+
+
