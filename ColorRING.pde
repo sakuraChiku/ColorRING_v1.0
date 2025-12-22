@@ -5,7 +5,7 @@ int[] preview = {0,0,0,0,0,0,0,0};
 // layout tuning
 int iconBaseX = 50;
 int iconBaseY = 50;
-int iconSpacing = 160;
+int iconSpacing = 157;
 // Text editor instance (from texting.pde)
 TextEditor editor;
 Texting_Color text_color;
@@ -30,6 +30,9 @@ void setup() {
     export_sidebar = new Export_Sidebar();
     // basics helper + sidebar
     setupBasics();
+    setupBasicsSidebar();
+    setupColor();
+    setupDetails();
 
     //decide when and where the cursor is TEXT
     if ((editor != null) && (run[4] == 1) && (mouseX > 0 && mouseX < 550) && (mouseY > 100 && mouseY < 600)) cursor(TEXT);
@@ -60,7 +63,7 @@ void click_a_button(int x_pos, int y_pos, color c_put, color c_click, int i) {
 }
 
 void draw() {
-    background(255);
+    background(30);
     // reset preview flags each frame; icons will set the relevant one when hovered
     for (int i = 0; i < preview.length; i++) preview[i] = 0;
     // Draw imported image if available
@@ -68,6 +71,7 @@ void draw() {
         importer.display();
     }
     
+    stroke(0); // Ensure border lines are black
     line(0, 100, width, 100);
     line(900, 100, 900, height);
     rectMode(CENTER);
@@ -122,14 +126,40 @@ void draw() {
         // Show basics sidebar when basic tool is selected
         cursor(ARROW);
         basics_sidebar_shape();
+    } else if (run[3] == 1) {
+        // Show Color sidebar
+        cursor(ARROW);
+        color_sidebar_shape();
+        
+    } else if (run[5] == 1) {
+        // Show Details sidebar
+        cursor(ARROW);
+        details_sidebar_shape();
     } else if (run[6] == 1) {
         // Show paint sidebar when paint tool is selected
         cursor(ARROW);
         paint_sidebar.shape();
         // Update brush settings
-        paintBrush.setColor(paint_sidebar.r, paint_sidebar.g, paint_sidebar.b);
+        paintBrush.setEraser(paint_sidebar.isEraser);
         paintBrush.setSize(paint_sidebar.brushSize);
-        paintBrush.setAlpha(paint_sidebar.alpha);
+        
+        if (!paint_sidebar.isEraser) {
+            paintBrush.setColor(paint_sidebar.r, paint_sidebar.g, paint_sidebar.b);
+            paintBrush.setAlpha(paint_sidebar.alpha);
+        }
+        
+        // Check for reset action
+        if (paint_sidebar.resetClicked) {
+            paintBrush.clear();
+            paint_sidebar.resetClicked = false;
+        }
+
+        // Show brush preview when paint tool is selected
+        if (mouseX < 900 && mouseY > 100) {
+            noCursor();
+            paintBrush.mousePreview();
+        }
+        
     } else if (run[7] == 1) {
         // Show export sidebar when export tool is selected
         cursor(ARROW);
@@ -169,7 +199,7 @@ void draw() {
             float boxX = constrain(ix, boxW/2 + 4, width - boxW/2 - 4);
             rectMode(CENTER);
             fill(255, 250, 230);
-            stroke(120);
+            stroke(60);
             rect(boxX, iy + 58, boxW, boxH, 6);
             fill(20);
             textAlign(CENTER, CENTER);
@@ -215,9 +245,10 @@ void mouseClicked() {
     }
     
     // Handle paint sidebar slider clicks
-    if (run[6] == 1) {
-        paint_sidebar.mousePressed();
-    }
+    // Removed to prevent double-toggling of buttons (handled in mousePressed)
+    // if (run[6] == 1) {
+    //    paint_sidebar.mousePressed();
+    // }
     
     // handle text format clicks first (dropdown has priority)
     if (run[4] == 1) {
@@ -236,9 +267,6 @@ void mouseClicked() {
             text_color.r = (int)red(boxColor);
             text_color.g = (int)green(boxColor);
             text_color.b = (int)blue(boxColor);
-            text_color.r_pos = map(text_color.r, 0, 255, 0, text_color.slider_width);
-            text_color.g_pos = map(text_color.g, 0, 255, 0, text_color.slider_width);
-            text_color.b_pos = map(text_color.b, 0, 255, 0, text_color.slider_width);
         }
     }
     // also handle text color slider clicks
@@ -250,7 +278,7 @@ void mouseClicked() {
 
 void mousePressed() {
     // Start painting when paint tool is selected and clicking in canvas area
-    if (run[6] == 1 && mouseX < 550 && mouseY > 100) {
+    if (run[6] == 1 && mouseX < 900 && mouseY > 100) {
         paintBrush.startStroke(mouseX, mouseY);
     }
     
@@ -272,6 +300,8 @@ void mousePressed() {
     }
     // Basics sidebar press forward
     if (run[2] == 1) basics_sidebar_mousePressed();
+    if (run[3] == 1) color_sidebar_mousePressed();
+    if (run[5] == 1) details_sidebar_mousePressed();
     // Forward press to export sidebar
     if (run[7] == 1) {
         export_sidebar.mousePressed();
@@ -280,7 +310,7 @@ void mousePressed() {
 
 void mouseDragged() {
     // Continue painting when dragging
-    if (run[6] == 1 && mouseX < 550 && mouseY > 100) {
+    if (run[6] == 1 && mouseX < 900 && mouseY > 100) {
         paintBrush.continueStroke(mouseX, mouseY);
     }
     
@@ -301,6 +331,8 @@ void mouseDragged() {
     }
     // Basics sidebar drag forward
     if (run[2] == 1) basics_sidebar_mouseDragged();
+    if (run[3] == 1) color_sidebar_mouseDragged();
+    if (run[5] == 1) details_sidebar_mouseDragged();
 }
 
 void mouseReleased() {
@@ -321,11 +353,15 @@ void mouseReleased() {
     }
     // Basics sidebar release forward
     if (run[2] == 1) basics_sidebar_mouseReleased();
+    if (run[3] == 1) color_sidebar_mouseReleased();
+    if (run[5] == 1) details_sidebar_mouseReleased();
 }
 
 void keyPressed() {
     // only forward keyboard input to editor when text tool is selected
     if (editor != null && run[4] == 1) editor.keyPressed();
+    // forward keyboard input to export sidebar when export tool is selected
+    if (export_sidebar != null && run[7] == 1) export_sidebar.keyPressed();
 }
 
 // Callback function for file selection
@@ -337,4 +373,122 @@ void fileSelected(File selection) {
         // Load the selected image
         importer.updateImage(selection.getAbsolutePath());
     }
+}
+
+void drawModernSlider(float x, float y, float w, float val, float min, float max, String label) {
+  pushStyle();
+  stroke(80);
+  strokeWeight(2);
+  line(x, y, x + w, y); // 轨道
+  float kx = map(val, min, max, x, x + w);
+  noStroke();
+  fill(150, 180, 255);
+  ellipse(kx, y, 12, 12); // 滑块
+  fill(200);
+  textSize(11);
+  text(label, x, y - 8);
+  text(nf(val, 1, 1), x + w + 10, y + 4);
+  popStyle();
+}
+
+// Global Pipeline to chain all effects
+void applyPipeline() {
+    if (importer == null || importer.originalCanvas == null) return;
+    
+    // 1. Start with the base image (which might be cropped)
+    // Note: Crop is destructive to originalCanvas, so we don't need to re-apply crop here.
+    // But Scale and Rotation are currently parameters in Cut_Sidebar.
+    // We need to apply Scale/Rotation first.
+    
+    PGraphics src = importer.originalCanvas;
+    int w = src.width;
+    int h = src.height;
+    
+    // Apply Scale & Rotation (Non-destructive preview)
+    if (cut_sidebar != null) {
+        float s = cut_sidebar.scaleVal;
+        float r = radians(cut_sidebar.rotationDeg);
+        
+        if (s != 1.0 || r != 0) {
+            // Calculate new dimensions if needed, or keep canvas size?
+            // For now, let's keep canvas size same as originalCanvas to avoid complexity,
+            // or use the logic from Cut_Sidebar to resize.
+            // Cut_Sidebar logic:
+            int tW = max(1, int(w * s));
+            int tH = max(1, int(h * s));
+            // Limit size
+            int maxPixels = 6000000;
+            long pixels = (long)tW * (long)tH;
+            float downscale = 1.0;
+            if (pixels > maxPixels) {
+                downscale = sqrt((float)maxPixels / (float)pixels);
+                tW = max(1, int(tW * downscale));
+                tH = max(1, int(tH * downscale));
+            }
+            float effectiveScale = s * downscale;
+            
+            PGraphics temp = createGraphics(tW, tH);
+            temp.beginDraw();
+            temp.background(200); // Gray background for rotation
+            temp.pushMatrix();
+            temp.translate(temp.width/2, temp.height/2);
+            temp.rotate(r);
+            temp.scale(effectiveScale);
+            temp.image(src, -w/2, -h/2);
+            temp.popMatrix();
+            temp.endDraw();
+            
+            // Update src to point to this transformed image for next steps
+            // We need to convert PGraphics to PImage for filters
+            src = temp; 
+        }
+    }
+    
+    PImage workingImg = src.get();
+    
+    // 2. Apply Basics (Exposure, Contrast, Zones)
+    if (basics != null && basics_sidebar != null) {
+        workingImg = basics.applyAdjustments(workingImg, 
+                                           basics_sidebar.exposure, 
+                                           basics_sidebar.contrast, 
+                                           basics_sidebar.zoneValues);
+    }
+    
+    // 3. Apply Color (Temp, Tint, Vibrance, Saturation, Split Toning)
+    if (colorProcessor != null && color_sidebar != null) {
+        workingImg = colorProcessor.process(workingImg, 
+                                          color_sidebar.temp, 
+                                          color_sidebar.tint, 
+                                          color_sidebar.vibrance, 
+                                          color_sidebar.saturation, 
+                                          color_sidebar.shadowT, 
+                                          color_sidebar.midT, 
+                                          color_sidebar.highT);
+    }
+    
+    // 4. Apply Details (Sharpen, Blur, Clarity, Texture)
+    if (detailsProcessor != null && details_sidebar != null) {
+        workingImg = detailsProcessor.applyDetails(workingImg, 
+                                                 details_sidebar.sharpen, 
+                                                 details_sidebar.blur, 
+                                                 details_sidebar.clarity, 
+                                                 details_sidebar.texture);
+    }
+    
+    // 5. Update Display Canvas
+    // Optimization: Reuse canvas if dimensions match to avoid heavy allocation
+    if (importer.canvas == null || importer.canvas.width != workingImg.width || importer.canvas.height != workingImg.height) {
+        importer.canvas = createGraphics(workingImg.width, workingImg.height);
+    }
+    
+    importer.canvas.beginDraw();
+    importer.canvas.background(0, 0); // Clear with transparent background
+    importer.canvas.image(workingImg, 0, 0);
+    importer.canvas.endDraw();
+    
+    // Optimization: Point img directly to canvas to avoid heavy .get() copy
+    // PGraphics is a PImage, so this works and is much faster.
+    importer.img = importer.canvas;
+    
+    importer.scaleAndPositionImage();
 }

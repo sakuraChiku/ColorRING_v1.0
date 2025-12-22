@@ -1,118 +1,94 @@
 class Texting_Color {
-    //parameters RGB
-    int r;
-    int g;
-    int b;
-    // slider parameters
-    float r_pos, g_pos, b_pos;  // x position of knobs (0-150 range)
-    float slider_y;
-    float knob_radius = 8;
-    int dragging = -1;  // -1=none, 0=R, 1=G, 2=B
-    int slider_x = 590, slider_width = 150;  // slider bar x and width
-
+    int r, g, b;
+    
+    // Layout
+    float left = 910;
+    float top = 110;
+    float w = 280;
+    
+    // Interaction
+    int draggingSlider = -1; // 0:R, 1:G, 2:B
+    
     Texting_Color(int temp_r, int temp_g, int temp_b) {
         r = temp_r;
         g = temp_g;
         b = temp_b;
-        // initialize slider positions based on RGB values
-        r_pos = map(r, 0, 255, 0, slider_width);
-        g_pos = map(g, 0, 255, 0, slider_width);
-        b_pos = map(b, 0, 255, 0, slider_width);
-        slider_y = 160;  // baseline for sliders
     }
-
+    
     void shape() {
         pushStyle();
         
-        textSize(24);
-        //the frame rectangle placed at right area (left = 910)
-        int left = 910;
-        int top = 110;
-        fill(255);
+        // Background
+        noStroke();
+        fill(40); // Dark background
         rectMode(CORNERS);
-        // extend bottom to include preview and any controls
-        rect(left, top, 1190, 450);
-
-        //function name
-        fill(0);
-        textMode(CORNERS);
-        text("Text Color", left + 5, top + 25);
-
-        //RGB
-        rectMode(CORNER);
-        // draw slider bars (positions relative to sidebar left)
-        slider_x = left + 30;
-        // draw slider bars
-        rect(slider_x, top + 45, slider_width, 5);
-        rect(slider_x, top + 85, slider_width, 5);
-        rect(slider_x, top + 125, slider_width, 5);
+        rect(left, top, width, height);
         
-        // draw knobs and values
-        drawSlider(155, r_pos, r);
-        drawSlider(195, g_pos, g);
-        drawSlider(235, b_pos, b);
-
-        //Text preview
-        textSize(24);
-        fill(0);  // draw preview text in RGB color
-        text("Text Preview", left + 5, top + 165);
+        // Header
+        fill(220);
+        textSize(14);
+        textAlign(LEFT, BASELINE);
+        text("Text Color", left + 10, top + 30);
         
-        // draw preview text with current RGB color
-        fill(r, g, b);
-        textSize(24);
-        text("Sample", left + 95, top + 200);
-
-        //Signs of RGB
-        fill(0);
-        textSize(18);
-        text("R", left + 10, top + 55);
-        text("G", left + 10, top + 95);
-        text("B", left + 10, top + 135);
+        // RGB Sliders
+        drawControlSlider("Red", r, 0, 255, left + 10, top + 60, 0);
+        drawControlSlider("Green", g, 0, 255, left + 10, top + 100, 1);
+        drawControlSlider("Blue", b, 0, 255, left + 10, top + 140, 2);
         
         popStyle();
     }
     
-    void drawSlider(float bar_y, float knob_x, int value) {
-        // draw knob centered on slider bar (bar height is 5, so center at bar_y + 2.5)
-        fill(100);
-        circle(slider_x + knob_x, bar_y + 2.5, knob_radius * 2);
-        
-        // draw value on the right
-        fill(0);
-        textSize(16);
-        text(value, slider_x + slider_width + 10, bar_y + 5);
+    void drawControlSlider(String label, float val, float min, float max, float x, float y, int id) {
+        float sliderW = 160;
+        float sliderX = x + 80;
+        fill(180);
+        textSize(12);
+        textAlign(LEFT, CENTER);
+        text(label, x, y);
+        stroke(80);
+        strokeWeight(2);
+        line(sliderX, y, sliderX + sliderW, y);
+        float kx = map(val, min, max, sliderX, sliderX + sliderW);
+        noStroke();
+        if (id == draggingSlider) fill(255); else fill(180);
+        ellipse(kx, y, 12, 12);
+        fill(150);
+        textAlign(RIGHT, CENTER);
+        text(int(val), x + w - 25, y);
     }
     
     void updateSliders() {
-        if (dragging == 0) {
-            r_pos = constrain(mouseX - slider_x, 0, slider_width);
-            r = (int)map(r_pos, 0, slider_width, 0, 255);
-        } else if (dragging == 1) {
-            g_pos = constrain(mouseX - slider_x, 0, slider_width);
-            g = (int)map(g_pos, 0, slider_width, 0, 255);
-        } else if (dragging == 2) {
-            b_pos = constrain(mouseX - slider_x, 0, slider_width);
-            b = (int)map(b_pos, 0, slider_width, 0, 255);
-        }
+        float sx = left + 90;
+        float sw = 160;
+        
+        if (draggingSlider == 0) r = (int)updateSliderVal(0, 255, sx, sw);
+        else if (draggingSlider == 1) g = (int)updateSliderVal(0, 255, sx, sw);
+        else if (draggingSlider == 2) b = (int)updateSliderVal(0, 255, sx, sw);
+    }
+    
+    float updateSliderVal(float min, float max, float sx, float sw) {
+        return constrain(map(mouseX, sx, sx+sw, min, max), min, max);
     }
     
     void mousePressed() {
-        // check if clicking on R slider knob (centered at bar_y + 2.5)
-        if (dist(mouseX, mouseY, slider_x + r_pos, 155 + 2.5) < knob_radius + 5) {
-            dragging = 0;
+        if (checkSlider(r, 0, 255, left+10, top+60, 0)) return;
+        if (checkSlider(g, 0, 255, left+10, top+100, 1)) return;
+        if (checkSlider(b, 0, 255, left+10, top+140, 2)) return;
+    }
+    
+    boolean checkSlider(float val, float min, float max, float x, float y, int id) {
+        float sx = x+80; float sw = 160;
+        float kx = map(val, min, max, sx, sx+sw);
+        if (dist(mouseX, mouseY, kx, y) < 15 || (mouseX>=sx && mouseX<=sx+sw && abs(mouseY-y)<10)) {
+            draggingSlider = id;
+            updateSliders();
+            return true;
         }
-        // check if clicking on G slider knob
-        else if (dist(mouseX, mouseY, slider_x + g_pos, 195 + 2.5) < knob_radius + 5) {
-            dragging = 1;
-        }
-        // check if clicking on B slider knob
-        else if (dist(mouseX, mouseY, slider_x + b_pos, 235 + 2.5) < knob_radius + 5) {
-            dragging = 2;
-        }
+        return false;
     }
     
     void mouseReleased() {
-        dragging = -1;
+        draggingSlider = -1;
     }
 }
 
@@ -121,130 +97,127 @@ class Texting_Format {
     String[] fontNames = {"Arial", "Times", "Courier", "Georgia"};
     int selectedFont = 0;  // index of selected font
     boolean dropdownOpen = false;
-    int dropdown_x = 610, dropdown_y = 410, dropdown_w = 150, dropdown_h = 30;
+    int dropdown_x = 910 + 60, dropdown_y = 300 + 50, dropdown_w = 150, dropdown_h = 25;
     
     // font size slider parameters
     int fontSize = 24;  // default font size
-    float size_pos;  // slider position (0-150 range)
-    int slider_x = 590, slider_width = 150;
-    float size_slider_y = 500;
-    float knob_radius = 8;
-    boolean draggingSize = false;
-
+    
+    // Layout
+    float left = 910;
+    float top = 300;
+    float w = 280;
+    
+    // Interaction
+    int draggingSlider = -1; // 0:Size
+    
     Texting_Format() {
-        // initialize size slider position based on default fontSize (range 12-48)
-        size_pos = map(fontSize, 12, 48, 0, slider_width);
     }
 
     void shape() {
         pushStyle();
         
-        textSize(24);
-        // the frame rectangle placed at right area (moved down to sit below divider)
-        int left = 910;
-        int top = 450;
-        fill(255);
+        // Background
+        noStroke();
+        fill(40); // Dark background
         rectMode(CORNERS);
-        // expand bottom to allow dropdown items and preview text to fit
-        rect(left, top, 1190, 720);
+        rect(left, top, width, height);
         
-        //function name
-        fill(0);
-        text("Text Font & Size", left + 5, top + 25);
+        // Header
+        fill(220);
+        textSize(14);
+        textAlign(LEFT, BASELINE);
+        text("Text Format", left + 10, top + 30);
         
-        // Font dropdown label
-        textSize(18);
-        fill(0);
-        text("Font:", left + 5, top + 60);
+        // Font Dropdown
+        fill(180);
+        textSize(12);
+        textAlign(LEFT, CENTER);
+        text("Font", left + 10, top + 60);
         
-        // Draw dropdown button (position relative to left)
-        dropdown_x = left + 50;
-        dropdown_y = top + 50;
-        fill(240);
-        stroke(0);
+        // Dropdown Button
+        dropdown_x = (int)(left + 60);
+        dropdown_y = (int)(top + 50);
+        
+        fill(60);
+        stroke(80);
         rectMode(CORNER);
-        rect(dropdown_x, dropdown_y, dropdown_w, dropdown_h);
+        rect(dropdown_x, dropdown_y, dropdown_w, dropdown_h, 4);
         
-        // Draw selected font name
-        fill(0);
-        textSize(16);
-        text(fontNames[selectedFont], dropdown_x + 5, dropdown_y + 20);
-        
-        // Draw dropdown arrow
-        fill(0);
-        triangle(dropdown_x + dropdown_w - 20, dropdown_y + 12,
-                 dropdown_x + dropdown_w - 10, dropdown_y + 12,
-                 dropdown_x + dropdown_w - 15, dropdown_y + 18);
-        
-        // Font size slider label
-        textSize(18);
-        fill(0);
-        text("Size:", left + 5, top + 125);
-        
-        // Draw size slider bar
-        slider_x = left + 50;
-        size_slider_y = top + 125;
         fill(200);
-        rectMode(CORNER);
-        rect(slider_x, size_slider_y, slider_width, 5);
+        textAlign(LEFT, CENTER);
+        text(fontNames[selectedFont], dropdown_x + 10, dropdown_y + dropdown_h/2);
         
-        // Draw size slider knob
-        fill(100);
-        circle(slider_x + size_pos, size_slider_y + 2.5, knob_radius * 2);
+        // Arrow
+        fill(200);
+        triangle(dropdown_x + dropdown_w - 15, dropdown_y + 10,
+                 dropdown_x + dropdown_w - 5, dropdown_y + 10,
+                 dropdown_x + dropdown_w - 10, dropdown_y + 16);
         
-        // Draw size value
-        fill(0);
-        textSize(16);
-        text(fontSize, slider_x + slider_width + 10, size_slider_y + 5);
-        
-        // Font preview
-        textSize(18);
-        fill(0);
-        text("Preview:", left + 5, top + 195);
-        
-        // Draw preview text with selected font and size
-        textSize(fontSize);
-        text("Sample", left + 145, top + 195);
+        // Size Slider
+        drawControlSlider("Size", fontSize, 12, 48, left + 10, top + 100, 0);
         
         popStyle();
     }
     
-    // Draw dropdown menu on top layer (called after everything else)
+    void drawControlSlider(String label, float val, float min, float max, float x, float y, int id) {
+        float sliderW = 160;
+        float sliderX = x + 80;
+        fill(180);
+        textSize(12);
+        textAlign(LEFT, CENTER);
+        text(label, x, y);
+        stroke(80);
+        strokeWeight(2);
+        line(sliderX, y, sliderX + sliderW, y);
+        float kx = map(val, min, max, sliderX, sliderX + sliderW);
+        noStroke();
+        if (id == draggingSlider) fill(255); else fill(180);
+        ellipse(kx, y, 12, 12);
+        fill(150);
+        textAlign(RIGHT, CENTER);
+        text(int(val), x + w - 25, y);
+    }
+    
     void drawDropdown() {
         if (!dropdownOpen) return;
         
         pushStyle();
-        
-        // Draw dropdown menu items
         for (int i = 0; i < fontNames.length; i++) {
-            fill(i == selectedFont ? 200 : 240);
-            stroke(0);
+            fill(i == selectedFont ? 80 : 60);
+            stroke(80);
             rectMode(CORNER);
             rect(dropdown_x, dropdown_y + (i + 1) * dropdown_h, dropdown_w, dropdown_h);
-            fill(0);
-            textSize(16);
-            text(fontNames[i], dropdown_x + 5, dropdown_y + (i + 1) * dropdown_h + 20);
+            fill(200);
+            textSize(12);
+            textAlign(LEFT, CENTER);
+            text(fontNames[i], dropdown_x + 10, dropdown_y + (i + 1) * dropdown_h + dropdown_h/2);
         }
-        
         popStyle();
     }
     
-    // Update format settings from a textbox
     void updateFromTextBox(int fontIndex, int size) {
         selectedFont = constrain(fontIndex, 0, fontNames.length - 1);
         fontSize = constrain(size, 12, 48);
-        size_pos = map(fontSize, 12, 48, 0, slider_width);
+    }
+    
+    void updateSliders() {
+        float sx = left + 90;
+        float sw = 160;
+        if (draggingSlider == 0) fontSize = (int)updateSliderVal(12, 48, sx, sw);
+    }
+    
+    float updateSliderVal(float min, float max, float sx, float sw) {
+        return constrain(map(mouseX, sx, sx+sw, min, max), min, max);
     }
     
     void mousePressed() {
-        // Check if clicking on dropdown button
+        // Check Dropdown
         if (mouseX >= dropdown_x && mouseX <= dropdown_x + dropdown_w &&
             mouseY >= dropdown_y && mouseY <= dropdown_y + dropdown_h) {
             dropdownOpen = !dropdownOpen;
             return;
         }
         
-        // Check if clicking on dropdown menu items
         if (dropdownOpen) {
             for (int i = 0; i < fontNames.length; i++) {
                 if (mouseX >= dropdown_x && mouseX <= dropdown_x + dropdown_w &&
@@ -257,25 +230,28 @@ class Texting_Format {
             }
         }
         
-        // Check if clicking on size slider knob
-        if (dist(mouseX, mouseY, slider_x + size_pos, size_slider_y + 2.5) < knob_radius + 5) {
-            draggingSize = true;
-        }
+        // Check Slider
+        if (checkSlider(fontSize, 12, 48, left+10, top+100, 0)) return;
         
-        // Close dropdown if clicking elsewhere
-        if (dropdownOpen) {
-            dropdownOpen = false;
+        if (dropdownOpen) dropdownOpen = false;
+    }
+    
+    boolean checkSlider(float val, float min, float max, float x, float y, int id) {
+        float sx = x+80; float sw = 160;
+        float kx = map(val, min, max, sx, sx+sw);
+        if (dist(mouseX, mouseY, kx, y) < 15 || (mouseX>=sx && mouseX<=sx+sw && abs(mouseY-y)<10)) {
+            draggingSlider = id;
+            updateSliders();
+            return true;
         }
+        return false;
     }
     
     void updateSlider() {
-        if (draggingSize) {
-            size_pos = constrain(mouseX - slider_x, 0, slider_width);
-            fontSize = (int)map(size_pos, 0, slider_width, 12, 48);
-        }
+        if (draggingSlider != -1) updateSliders();
     }
     
     void mouseReleased() {
-        draggingSize = false;
+        draggingSlider = -1;
     }
 }

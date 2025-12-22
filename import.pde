@@ -3,6 +3,8 @@ class ImageImporter {
     PImage img;
     PGraphics canvas; // full-resolution canvas matching original image size
     PGraphics originalCanvas; // unmodified base canvas for transforms
+    PImage rawImage; // Backup of the initial loaded image for reset
+    
     // preview controls for non-destructive tint/brightness preview
     boolean previewActive = false;
     float previewExposure = 1.0;
@@ -14,6 +16,7 @@ class ImageImporter {
         if (path != null && path.length() > 0) {
             img = loadImage(path);
             if (img != null) {
+                rawImage = img.get(); // Save backup
                 scaleAndPositionImage();
             }
         }
@@ -65,6 +68,7 @@ class ImageImporter {
                     newImg.resize(newW, newH);
                 }
                 img = newImg;
+                rawImage = img.get(); // Save backup
                 // create a full-resolution canvas same size as the original (or resized) image
                 // create both originalCanvas (base) and working canvas
                 originalCanvas = createGraphics(img.width, img.height);
@@ -81,6 +85,25 @@ class ImageImporter {
             } else {
                 println("Failed to load image: " + path);
             }
+        }
+    }
+
+    // Reset originalCanvas to the raw loaded image
+    void resetToRaw() {
+        if (rawImage != null) {
+            originalCanvas = createGraphics(rawImage.width, rawImage.height);
+            originalCanvas.beginDraw();
+            originalCanvas.image(rawImage, 0, 0);
+            originalCanvas.endDraw();
+            
+            // Also reset working canvas
+            canvas = createGraphics(rawImage.width, rawImage.height);
+            canvas.beginDraw();
+            canvas.image(originalCanvas, 0, 0);
+            canvas.endDraw();
+            
+            img = canvas; // Point display to canvas
+            scaleAndPositionImage();
         }
     }
 
@@ -163,9 +186,13 @@ class ImageImporter {
 }
 
 class Import_Sidebar {
-    int button_x = 590, button_y = 230;
-    int button_w = 130, button_h = 40;
-    boolean hovering = false;
+    // Layout
+    float left = 910;
+    float top = 110;
+    
+    // Button
+    float button_x, button_y;
+    float button_w = 150, button_h = 40;
     
     Import_Sidebar() {
     }
@@ -173,97 +200,123 @@ class Import_Sidebar {
     void shape() {
         pushStyle();
         
-        textSize(24);
-        // Frame rectangle placed at the right area (left = 910)
-        fill(255);
+        // Background
+        noStroke();
+        fill(40); // Dark background
         rectMode(CORNERS);
+        rect(left, top, width, height);
         
-        
-        // Function name
-        fill(0);
-        text("Import Image", 915, 135);
+        // Header
+        fill(220);
+        textSize(14);
+        textAlign(LEFT, BASELINE);
+        text("Import Image", left + 10, top + 30);
         
         // Instructions
-        textSize(16);
-        fill(80);
-        text("Click the button below", 915, 180);
-        text("to select an image", 915, 200);
-        text("from your computer.", 915, 220);
+        fill(180);
+        textSize(12);
+        text("Click to select an image", left + 10, top + 60);
+        text("from your computer.", left + 10, top + 80);
         
-        // Draw button (positioned inside right sidebar)
-        button_x = 910 + 10;
-        button_y = 230;
-        checkHover();
-        if (hovering) {
-            fill(180, 200, 255);
-        } else {
-            fill(200, 220, 255);
-        }
-        stroke(100, 120, 200);
-        strokeWeight(2);
-        rectMode(CORNER);
-        rect(button_x, button_y, button_w, button_h, 5);
-        
-        // Button text
-        fill(0);
-        textSize(18);
-        textAlign(CENTER, CENTER);
-        text("Select Image", button_x + button_w/2, button_y + button_h/2);
-        textAlign(LEFT, BASELINE);
+        // Select Button
+        button_x = left + 10;
+        button_y = top + 100;
+        drawButton("Select Image", button_x, button_y, button_w, button_h);
         
         // Info text
-        textSize(14);
-        fill(100);
-        text("Image will be centered in the canvas area.", 915, 320);
-        text("Displayed preview is scaled; full canvas matches image size.", 915, 340);
-        text("Imported images are constrained to max 900x700.", 915, 360);
+        fill(150);
+        textSize(12);
+        text("Image will be centered.", left + 10, top + 160);
+        text("Max size: 900x700.", left + 10, top + 180);
 
         // Canvas preview and controls
         if (importer != null && importer.canvas != null) {
             int cw = importer.canvas.width;
             int ch = importer.canvas.height;
+            
+            fill(220);
             textSize(14);
-            fill(80);
-            text("Canvas: " + cw + " x " + ch, 915, 390);
+            text("Canvas Size", left + 10, top + 220);
+            
+            fill(180);
+            textSize(12);
+            text(cw + " x " + ch, left + 10, top + 240);
 
             // preview box (scaled down)
-            float pvW = 220;
+            float pvW = 200;
             float pvH = 120;
             float scale = min(pvW / cw, pvH / ch);
             float drawW = cw * scale;
             float drawH = ch * scale;
-            float pvX = 915;
-            float pvY = 410;
+            float pvX = left + 10;
+            float pvY = top + 260;
+            
             rectMode(CORNER);
-            fill(230);
-            stroke(150);
+            fill(60);
+            stroke(80);
             rect(pvX, pvY, pvW, pvH);
+            
             // draw canvas preview centered in pv box
-            if (importer.originalCanvas != null) image(importer.originalCanvas, pvX + (pvW - drawW)/2, pvY + (pvH - drawH)/2, drawW, drawH);
+            if (importer.originalCanvas != null) {
+                image(importer.originalCanvas, pvX + (pvW - drawW)/2, pvY + (pvH - drawH)/2, drawW, drawH);
+            }
 
-            // width/height adjust buttons
-            int bx = int(pvX + pvW + 8);
-            int by = int(pvY);
-            int bw = 28;
-            int bh = 20;
-            // width -
-            rect(bx, by, bw, bh);
-            fill(0); textSize(14); textAlign(CENTER, CENTER); text("-W", bx + bw/2, by + bh/2);
-            // width +
-            fill(255); rect(bx, by + bh + 6, bw, bh); fill(0); text("+W", bx + bw/2, by + bh + 6 + bh/2);
-            // height -
-            fill(255); rect(bx, by + 2*(bh + 6), bw, bh); fill(0); text("-H", bx + bw/2, by + 2*(bh + 6) + bh/2);
-            // height +
-            fill(255); rect(bx, by + 3*(bh + 6), bw, bh); fill(0); text("+H", bx + bw/2, by + 3*(bh + 6) + bh/2);
-            textAlign(LEFT, BASELINE);
+            // Resize Controls
+            float cx = left + 10;
+            float cy = pvY + pvH + 20;
+            
+            fill(220);
+            textSize(14);
+            text("Resize Canvas", cx, cy);
+            
+            // Buttons
+            float bw = 40;
+            float bh = 25;
+            float gap = 10;
+            
+            drawSmallButton("-W", cx, cy + 10, bw, bh);
+            drawSmallButton("+W", cx + bw + gap, cy + 10, bw, bh);
+            drawSmallButton("-H", cx + 2*(bw + gap), cy + 10, bw, bh);
+            drawSmallButton("+H", cx + 3*(bw + gap), cy + 10, bw, bh);
         }
         
         popStyle();
     }
     
-    void checkHover() {
-        hovering = (mouseX >= button_x && mouseX <= button_x + button_w &&
-                    mouseY >= button_y && mouseY <= button_y + button_h);
+    void drawButton(String label, float x, float y, float w, float h) {
+        rectMode(CORNER);
+        if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h) {
+            fill(100);
+        } else {
+            fill(80);
+        }
+        stroke(80);
+        strokeWeight(1);
+        rect(x, y, w, h, 4);
+        
+        fill(220);
+        textSize(12);
+        textAlign(CENTER, CENTER);
+        text(label, x + w/2, y + h/2);
+        textAlign(LEFT, BASELINE);
+    }
+    
+    void drawSmallButton(String label, float x, float y, float w, float h) {
+        rectMode(CORNER);
+        if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h) {
+            fill(100);
+        } else {
+            fill(80);
+        }
+        stroke(80);
+        strokeWeight(1);
+        rect(x, y, w, h, 4);
+        
+        fill(220);
+        textSize(10);
+        textAlign(CENTER, CENTER);
+        text(label, x + w/2, y + h/2);
+        textAlign(LEFT, BASELINE);
     }
     
     boolean isButtonClicked() {
@@ -272,36 +325,44 @@ class Import_Sidebar {
     }
 
     void mousePressed() {
-        // width/height buttons are to the right of preview area
-        float pvX = 915;
-        float pvY = 410;
-        int bw = 28;
-        int bh = 20;
-        int bx = int(pvX + 220 + 8);
-        int by = int(pvY);
-        // width -
-        if (mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh) {
-            if (importer != null && importer.originalCanvas != null) importer.resizeCanvas(max(64, importer.originalCanvas.width - 50), importer.originalCanvas.height);
-            else if (importer != null && importer.img != null) importer.resizeCanvas(max(64, importer.img.width - 50), importer.img.height);
-            return;
+        if (importer == null || importer.canvas == null) return;
+        
+        // Recalculate positions for hit testing
+        float pvH = 120;
+        float pvY = top + 260;
+        float cx = left + 10;
+        float cy = pvY + pvH + 20;
+        float bw = 40;
+        float bh = 25;
+        float gap = 10;
+        
+        // -W
+        if (checkHit(cx, cy + 10, bw, bh)) {
+             resize(max(64, importer.originalCanvas.width - 50), importer.originalCanvas.height);
+             return;
         }
-        // width +
-        if (mouseX >= bx && mouseX <= bx + bw && mouseY >= by + bh + 6 && mouseY <= by + 2*bh + 6) {
-            if (importer != null && importer.originalCanvas != null) importer.resizeCanvas(importer.originalCanvas.width + 50, importer.originalCanvas.height);
-            else if (importer != null && importer.img != null) importer.resizeCanvas(importer.img.width + 50, importer.img.height);
-            return;
+        // +W
+        if (checkHit(cx + bw + gap, cy + 10, bw, bh)) {
+             resize(importer.originalCanvas.width + 50, importer.originalCanvas.height);
+             return;
         }
-        // height -
-        if (mouseX >= bx && mouseX <= bx + bw && mouseY >= by + 2*(bh + 6) && mouseY <= by + 2*(bh + 6) + bh) {
-            if (importer != null && importer.originalCanvas != null) importer.resizeCanvas(importer.originalCanvas.width, max(64, importer.originalCanvas.height - 50));
-            else if (importer != null && importer.img != null) importer.resizeCanvas(importer.img.width, max(64, importer.img.height - 50));
-            return;
+        // -H
+        if (checkHit(cx + 2*(bw + gap), cy + 10, bw, bh)) {
+             resize(importer.originalCanvas.width, max(64, importer.originalCanvas.height - 50));
+             return;
         }
-        // height +
-        if (mouseX >= bx && mouseX <= bx + bw && mouseY >= by + 3*(bh + 6) && mouseY <= by + 3*(bh + 6) + bh) {
-            if (importer != null && importer.originalCanvas != null) importer.resizeCanvas(importer.originalCanvas.width, importer.originalCanvas.height + 50);
-            else if (importer != null && importer.img != null) importer.resizeCanvas(importer.img.width, importer.img.height + 50);
-            return;
+        // +H
+        if (checkHit(cx + 3*(bw + gap), cy + 10, bw, bh)) {
+             resize(importer.originalCanvas.width, importer.originalCanvas.height + 50);
+             return;
         }
+    }
+    
+    boolean checkHit(float x, float y, float w, float h) {
+        return (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h);
+    }
+    
+    void resize(int w, int h) {
+        if (importer != null) importer.resizeCanvas(w, h);
     }
 }

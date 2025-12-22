@@ -1,6 +1,4 @@
-// basics.pde
-// Image analysis & adjustment utilities used by the Basics sidebar
-
+// basics.pde - 彻底重构版
 Basics basics;
 
 void setupBasics() {
@@ -8,146 +6,75 @@ void setupBasics() {
 }
 
 class Basics {
-  int countR, countG, countB;
-  int imgW, imgH;
+  int[] hist = new int[256]; // 存储亮度直方图
+  int maxHist = 0;
 
-  Basics() {
-    countR = countG = countB = 0;
-  }
+  Basics() {}
 
-  // compute 3-color histogram (red/green/blue groups) and store counts
+  // 1. 修复直方图：基于亮度(Luminance)计算
   void computeHistogram() {
-    countR = countG = countB = 0;
     if (importer == null || importer.img == null) return;
+    for (int i = 0; i < 256; i++) hist[i] = 0;
+    maxHist = 0;
+
     PImage img = importer.img;
     img.loadPixels();
-    imgW = img.width; imgH = img.height;
-    
-    colorMode(HSB, 360, 100, 100);
     for (int i = 0; i < img.pixels.length; i++) {
-      color c = img.pixels[i];
-      float h = hue(c);
-      // classify to nearest of red(0), green(120), blue(240)
-      float dR = min(abs(h - 0), abs(h - 360));
-      float dG = abs(h - 120);
-      float dB = abs(h - 240);
-      if (dR <= dG && dR <= dB) countR++; else if (dG <= dR && dG <= dB) countG++; else countB++;
+      int c = img.pixels[i];
+      // 使用感知亮度公式: Y = 0.299R + 0.587G + 0.114B
+      int bright = int(red(c)*0.299 + green(c)*0.587 + blue(c)*0.114);
+      hist[bright]++;
+      if (hist[bright] > maxHist) maxHist = hist[bright];
     }
-    colorMode(RGB, 255);
   }
 
-  // apply adjustments to a copy of originalCanvas and commit when requested
-  PGraphics applyAdjustments(float exposure, float contrast, float[] zoneAdjusts) {
-    if (importer == null || importer.originalCanvas == null) return null;
-    PGraphics src = importer.originalCanvas;
-    PGraphics out = createGraphics(src.width, src.height);
-    // draw the source into out first to ensure pixels array is initialized and any background preserved
-    out.beginDraw();
-    out.image(src, 0, 0);
-    out.loadPixels();
-    src.loadPixels();
+  // 2. 优化图片调节逻辑：修复自动裁切问题
+  // 我们直接返回处理后的 PImage，不再在此处进行缩放，由 Importer 处理显示缩放
+  PImage applyAdjustments(PImage src, float exposure, float contrast, float[] zoneAdjusts) {
+    if (src == null) return null;
+    PImage dest = src.copy();
+    dest.loadPixels();
     
-    // Set color mode once before the loop for performance
-    colorMode(HSB, 360, 100, 100);
+    float contrastFactor = (1.2 * (contrast + 100)) / 100.0; // 优化对比度公式
     
-    // iterate pixels and modify brightness based on exposure/contrast/zone
-    for (int y = 0; y < src.height; y++) {
-      for (int x = 0; x < src.width; x++) {
-        int idx = x + y * src.width;
-        color c = src.pixels[idx];
-        
-        float h = hue(c);
-        float s = saturation(c);
-        float b = brightness(c); // 0..100
-        // determine tonal zone by brightness (PS-like thresholds)
-        // thresholds (0-100): blacks 0-21, shadows 22-37, darks 38-63, lights 64-78, highlights 79-90, whites 91-100
-        int zone = 2; // default light tones
-        if (b >= 91) zone = 0; // whites
-        else if (b >= 79) zone = 1; // highlights
-        else if (b >= 64) zone = 2; // lights
-        else if (b >= 38) zone = 3; // darks
-        else if (b >= 22) zone = 4; // shadows
-        else zone = 5; // blacks
-        // Map zone indices to slider order: [whites, highlights, lights, darks, shadows, blacks]
-        float zoneAdj = zoneAdjusts[zone]; // -100..100
-        // convert adjustments into effective brightness change
-        float cFactor = 1.0 + (contrast / 100.0);
-        float exposureShift = (exposure - 1.0) * 50.0; // exposure 1.0 -> 0
+    for (int i = 0; i < dest.pixels.length; i++) {
+      color c = dest.pixels[i];
+      float r = red(c);
+      float g = green(c);
+      float b = blue(c);
+      
+      // A. 曝光 (Exposure) - 线性增益
+      float expF = pow(2, exposure); 
+      r *= expF; g *= expF; b *= expF;
+      
+      // B. 分区调节 (Zone Adjust) - 模拟 Lightroom 的阴影/高光调节
+      float lum = (r + g + b) / 3.0;
+      int zone = floor(constrain(lum / 42.6, 0, 5)); // 将 0-255 分为 6 个区
+      float adj = zoneAdjusts[zone] * 2.0;
+      r += adj; g += adj; b += adj;
 
-    
-        float zoneShift = zoneAdj * 0.5; // scale zone effect
-        float newB = (b - 50.0) * cFactor + 50.0 + exposureShift + zoneShift;
-        newB = constrain(newB, 0, 100);
-        
-        color nc = color(h, s, newB);
-        out.pixels[idx] = nc;
-      }
+      // C. 对比度 (Contrast) - 以 128 为中心缩放
+      r = (r - 128) * contrastFactor + 128;
+      g = (g - 128) * contrastFactor + 128;
+      b = (b - 128) * contrastFactor + 128;
+
+      dest.pixels[i] = color(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
     }
-    
-    // Restore color mode
-    colorMode(RGB, 255);
-    
-    out.updatePixels();
-    out.endDraw();
-    return out;
+    dest.updatePixels();
+    return dest;
   }
-
-  // Create a small-resolution per-pixel preview to show accurate tonal adjustments interactively.
-  PImage applyAdjustmentsPreview(float exposure, float contrast, float[] zoneAdjusts, int targetW) {
-    if (importer == null || importer.originalCanvas == null) return null;
-    PGraphics src = importer.originalCanvas;
-    
-    try {
-      float ar = (float)src.width / (float)src.height;
-      int w = targetW;
-      int h = max(1, int(targetW / ar));
-      
-      // Use PImage instead of PGraphics for lighter weight preview
-      PImage out = createImage(w, h, RGB);
-      // Copy and scale content from src to out
-      out.copy(src, 0, 0, src.width, src.height, 0, 0, w, h);
-      out.loadPixels();
-      
-      // Set color mode once before the loop
-      colorMode(HSB, 360, 100, 100);
-      
-      int pixelCount = out.pixels.length;
-
-      // operate on out.pixels directly
-      for (int i = 0; i < pixelCount; i++) {
-          color c = out.pixels[i];
-          
-          float hh = hue(c);
-          float s = saturation(c);
-          float b = brightness(c);
-          int zone = 2;
-          if (b >= 91) zone = 0;
-          else if (b >= 79) zone = 1;
-          else if (b >= 64) zone = 2;
-          else if (b >= 38) zone = 3;
-          else if (b >= 22) zone = 4;
-          else zone = 5;
-          float zAdj = zoneAdjusts[zone];
-          float cFactor = 1.0 + (contrast / 100.0);
-          float exposureShift = (exposure - 1.0) * 50.0;
-          float zoneShift = zAdj * 0.5;
-          float newB = (b - 50.0) * cFactor + 50.0 + exposureShift + zoneShift;
-          newB = constrain(newB, 0, 100);
-          
-          color nc = color(hh, s, newB);
-          out.pixels[i] = nc;
-      }
-      
-      // Restore color mode
-      colorMode(RGB, 255);
-      
-      out.updatePixels();
-      return out;
-      
-    } catch (Exception e) {
-      println("ERROR in applyAdjustmentsPreview: " + e.toString());
-      e.printStackTrace();
-      return null;
+  
+  // 绘制直方图 UI
+  void drawHistogram(float x, float y, float w, float h) {
+    pushStyle();
+    fill(50, 150);
+    noStroke();
+    rect(x, y, w, h);
+    stroke(200, 200, 255);
+    for (int i = 0; i < 256; i++) {
+      float lineH = map(hist[i], 0, maxHist, 0, h);
+      line(x + map(i, 0, 255, 0, w), y + h, x + map(i, 0, 255, 0, w), y + h - lineH);
     }
+    popStyle();
   }
 }

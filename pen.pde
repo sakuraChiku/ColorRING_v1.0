@@ -6,6 +6,8 @@ class PaintBrush {
     float brushSize;
     int brushAlpha;
     boolean isDrawing;
+    boolean isEraserMode;
+    PGraphics pg; // Layer for painting
     
     PaintBrush() {
         strokes = new ArrayList<BrushStroke>();
@@ -13,10 +15,13 @@ class PaintBrush {
         brushSize = 5;
         brushAlpha = 255;
         isDrawing = false;
+        isEraserMode = false;
+        // Create a transparent layer matching the canvas size
+        pg = createGraphics(width, height);
     }
     
     void startStroke(int x, int y) {
-        currentStroke = new BrushStroke(brushColor, brushSize, brushAlpha);
+        currentStroke = new BrushStroke(brushColor, brushSize, brushAlpha, isEraserMode);
         currentStroke.addPoint(x, y);
         isDrawing = true;
     }
@@ -35,17 +40,30 @@ class PaintBrush {
         isDrawing = false;
     }
     
+    void clear() {
+        strokes.clear();
+    }
+    
+    void setEraser(boolean active) {
+        isEraserMode = active;
+    }
+    
     void display() {
-        pushStyle();
-        // Draw all saved strokes
+        // Draw everything to the off-screen buffer first
+        pg.beginDraw();
+        pg.clear(); // Clear layer to fully transparent
+        
         for (BrushStroke stroke : strokes) {
-            stroke.display();
+            stroke.displayOn(pg);
         }
         // Draw current stroke being drawn
         if (currentStroke != null) {
-            currentStroke.display();
+            currentStroke.displayOn(pg);
         }
-        popStyle();
+        pg.endDraw();
+        
+        // Draw the buffer onto the main canvas
+        image(pg, 0, 0);
     }
     
     void setColor(int r, int g, int b) {
@@ -59,6 +77,19 @@ class PaintBrush {
     void setAlpha(int alpha) {
         brushAlpha = alpha;
     }
+
+    void mousePreview() {
+        pushStyle();
+        if (isEraserMode) {
+            stroke(200);
+            fill(200, 100);
+        } else {
+            stroke(brushColor);
+            fill(red(brushColor), green(brushColor), blue(brushColor), 100);
+        }
+        ellipse(mouseX, mouseY, brushSize, brushSize);
+        popStyle();
+    }
 }
 
 // Single brush stroke
@@ -67,32 +98,45 @@ class BrushStroke {
     color strokeColor;
     float strokeSize;
     int strokeAlpha;
+    boolean isEraser;
     
-    BrushStroke(color c, float size, int alpha) {
+    BrushStroke(color c, float size, int alpha, boolean eraser) {
         points = new ArrayList<PVector>();
         strokeColor = c;
         strokeSize = size;
         strokeAlpha = alpha;
+        isEraser = eraser;
     }
     
     void addPoint(int x, int y) {
         points.add(new PVector(x, y));
     }
     
-    void display() {
+    void displayOn(PGraphics pg) {
         if (points.size() < 2) return;
         
-        pushStyle();
-        stroke(red(strokeColor), green(strokeColor), blue(strokeColor), strokeAlpha);
-        strokeWeight(strokeSize);
-        strokeCap(ROUND);
-        noFill();
+        pg.pushStyle();
         
-        beginShape();
-        for (PVector p : points) {
-            vertex(p.x, p.y);
+        if (isEraser) {
+            // Eraser mode: Replace pixels with transparency
+            pg.blendMode(REPLACE);
+            pg.stroke(0, 0); // 0 alpha = transparent
+        } else {
+            // Normal mode: Blend color
+            pg.blendMode(BLEND);
+            pg.stroke(red(strokeColor), green(strokeColor), blue(strokeColor), strokeAlpha);
         }
-        endShape();
-        popStyle();
+        
+        pg.strokeWeight(strokeSize);
+        pg.strokeCap(ROUND);
+        pg.noFill();
+        
+        pg.beginShape();
+        for (PVector p : points) {
+            pg.vertex(p.x, p.y);
+        }
+        pg.endShape();
+        
+        pg.popStyle();
     }
 }
